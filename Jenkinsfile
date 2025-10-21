@@ -68,22 +68,33 @@ pipeline {
         //     }
         // }
         
-        stage('Update Kubernetes Manifest') {
+        stage('Commit and Push Manifest Changes') {
             steps {
+                echo 'Committing manifest changes...'
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'github-creds',
-                                                    usernameVariable: 'GIT_USER',
-                                                    passwordVariable: 'GITHUB_TOKEN')]) {
-                    sh '''
-                        git config user.email "jenkins@ci.com"
-                        git config user.name "Jenkins CI"
-                        sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g' environments/staging/deployment.yaml
-                        git add environments/staging/deployment.yaml
-                        git commit -m "Update staging image to ${IMAGE_TAG}" || echo "No changes to commit"
-                        # Set origin to include credentials (masked in logs)
-                        git remote set-url origin https://${GIT_USER}:${GITHUB_TOKEN}@github.com/eknathdj/devops-argocd-jenkins-app.git
-                        git push origin main
-                    '''
+                    withCredentials([usernamePassword(credentialsId: GITHUB_CREDENTIALS, 
+                                                      usernameVariable: 'GIT_USERNAME', 
+                                                      passwordVariable: 'GIT_PASSWORD')]) {
+                        sh """
+                            # Configure Git
+                            git config user.email "jenkins@example.com"
+                            git config user.name "Jenkins CI"
+                            
+                            # Checkout main branch (fix detached HEAD)
+                            git checkout main
+                            git pull origin main
+                            
+                            # Add the modified file
+                            git add environments/staging/deployment.yaml
+                            
+                            # Only commit and push if there are changes
+                            if git diff --staged --quiet; then
+                                echo "No changes to commit"
+                            else
+                                git commit -m "Update image to ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                                git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/eknathdj/devops-sample-app.git main
+                            fi
+                        """
                     }
                 }
             }
