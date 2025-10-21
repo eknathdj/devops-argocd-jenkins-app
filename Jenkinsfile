@@ -74,16 +74,16 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'github-creds',
                                                     usernameVariable: 'GIT_USER',
                                                     passwordVariable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        git config user.email "jenkins@ci.com"
-                        git config user.name "Jenkins CI"
-                        # if you want to use token only, push with token in URL:
-                        sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g' environments/staging/deployment.yaml
-                        git add environments/staging/deployment.yaml
-                        git commit -m "Update staging image to ${IMAGE_TAG}" || echo "No changes to commit"
-                        # Use token as password (username variable will be masked)
-                        git push https://${GIT_USER}:${GITHUB_TOKEN}@github.com/eknathdj/devops-argocd-jenkins-app.git main
-                    """
+                        sh """
+                            git config user.email "jenkins@ci.com"
+                            git config user.name "Jenkins CI"
+                            # if you want to use token only, push with token in URL:
+                            sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${IMAGE_TAG}|g' environments/staging/deployment.yaml
+                            git add environments/staging/deployment.yaml
+                            git commit -m "Update staging image to ${IMAGE_TAG}" || echo "No changes to commit"
+                            # Use token as password (username variable will be masked)
+                            git push https://${GIT_USER}:${GITHUB_TOKEN}@github.com/eknathdj/devops-argocd-jenkins-app.git main
+                        """
                     }
                 }
             }
