@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: your-dockerhub-username/devops-sample-app:1
+        image: eknathdj/devops-sample-app:1
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
