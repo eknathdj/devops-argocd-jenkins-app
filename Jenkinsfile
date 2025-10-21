@@ -3,7 +3,7 @@ pipeline {
     
     environment {
         DOCKER_IMAGE = "eknathdj/devops-sample-app"
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+        DOCKER_CREDENTIALS_ID = "dockerhub-creds"
         GITHUB_CREDENTIALS = credentials('github-creds')
         IMAGE_TAG = "${BUILD_NUMBER}"
         GITHUB_REPO = "https://github.com/eknathdj/devops-argocd-jenkins-app.git"
@@ -35,18 +35,28 @@ pipeline {
             }
         }
         
-        stage('Login to DockerHub') {
-        steps {
-            withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                            usernameVariable: 'DOCKERHUB_USER',
-                                            passwordVariable: 'DOCKERHUB_PASS')]) {
-            sh '''
-                # show which user we're trying (username will be masked)
-                echo "Logging into Docker Hub as $DOCKERHUB_USER"
-                echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin
-            '''
+        stage('Test') {
+            steps {
+                echo 'Running tests...'
+                script {
+                    docker.image("${DOCKER_IMAGE}:${IMAGE_TAG}").inside {
+                        sh 'npm test'
+                    }
+                    echo 'Tests passed successfully'
+                }
             }
         }
+        
+        stage('Push to DockerHub') {
+            steps {
+                echo 'Pushing Docker image to DockerHub...'
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', DOCKER_CREDENTIALS_ID) {
+                        dockerImage.push("${IMAGE_TAG}")
+                        dockerImage.push("latest")
+                    }
+                }
+            }
         }
         
         stage('Push Docker Image') {
