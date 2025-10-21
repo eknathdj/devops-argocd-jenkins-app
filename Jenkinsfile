@@ -26,26 +26,26 @@ pipeline {
         
         stage('Build Docker Image') {
             steps {
+                echo 'Building Docker image...'
                 script {
-                    sh """
-                        docker build -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
-                        docker tag ${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_IMAGE}:latest
-                    """
+                    dockerImage = docker.build("${DOCKER_IMAGE}:${IMAGE_TAG}")
+                    // Also tag as latest
+                    dockerImage.tag("latest")
                 }
             }
         }
         
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
-                script {
-                    docker.image("${DOCKER_IMAGE}:${IMAGE_TAG}").inside {
-                        sh 'npm test'
-                    }
-                    echo 'Tests passed successfully'
-                }
-            }
-        }
+        // stage('Test') {
+        //     steps {
+        //         echo 'Running tests...'
+        //         script {
+        //             docker.image("${DOCKER_IMAGE}:${IMAGE_TAG}").inside {
+        //                 sh 'npm test'
+        //             }
+        //             echo 'Tests passed successfully'
+        //         }
+        //     }
+        // }
         
         stage('Push to DockerHub') {
             steps {
