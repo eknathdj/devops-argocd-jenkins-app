@@ -26,43 +26,43 @@
 
 
 # Multi-stage build for Node.js application
-# FROM node:18-alpine AS builder
+FROM node:18-alpine AS builder
 
-# WORKDIR /app
+WORKDIR /app
 
-# # Copy package files
-# COPY package*.json ./
+# Copy package files
+COPY package*.json ./
 
-# # Install dependencies
-# RUN npm ci --only=production
+# Install dependencies
+RUN npm ci --only=production
 
-# # Copy application source
-# COPY . .
+# Copy application source
+COPY . .
 
-# # Production stage
-# FROM node:18-alpine
+# Production stage
+FROM node:18-alpine
 
-# WORKDIR /app
+WORKDIR /app
 
-# # Create non-root user
-# RUN addgroup -g 1001 -S nodejs && \
-#     adduser -S nodejs -u 1001
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-# # Copy from builder
-# COPY --from=builder --chown=nodejs:nodejs /app .
+# Copy from builder
+COPY --from=builder --chown=nodejs:nodejs /app .
 
-# # Switch to non-root user
-# USER nodejs
+# Switch to non-root user
+USER nodejs
 
-# # Expose application port
-# EXPOSE 8080
+# Expose application port
+EXPOSE 8080
 
-# # Health check
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#     CMD node healthcheck.js || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node healthcheck.js || exit 1
 
-# # Start application
-# CMD ["node", "server.js"]
+# Start application
+CMD ["node", "server.js"]
 
 # Alternative Dockerfile for Python applications
 # FROM python:3.11-slim
@@ -88,25 +88,25 @@
 # CMD ["python", "app.py"]
 
 # Alternative Dockerfile for Go applications
-FROM golang:1.21-alpine AS builder
+# FROM golang:1.21-alpine AS builder
 
-WORKDIR /app
+# WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
+# COPY go.mod go.sum ./
+# RUN go mod download
 
-COPY . .
+# COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+# RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-FROM alpine:latest
+# FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+# RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+# WORKDIR /root/
 
-COPY --from=builder /app/main .
+# COPY --from=builder /app/main .
 
-EXPOSE 8080
+# EXPOSE 8080
 
-CMD ["./main"]
+# CMD ["./main"]
