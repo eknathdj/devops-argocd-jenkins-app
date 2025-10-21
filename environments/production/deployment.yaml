@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: eknathdj/devops-sample-app:1
+        image: eeknathdj/devops-sample-app:24
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
