@@ -1,0 +1,37 @@
+argocd-linux-amd64
+argocd.exe
+
+# Ignore local secrets files
+k8s/product-service/01-secrets.local.yaml
+
+# Ignore any generated backup files from sed
+**/*.bak
+
+# Secrets (unsealed)
+secrets/
+*.secret.yaml
+*.secrets.yaml
+secret-*.yaml
+secrets-*.yaml
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.p12
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

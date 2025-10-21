@@ -1,0 +1,105 @@
+---
+# Service Account for Product Service
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: product-service-sa
+  namespace: product-service
+  labels:
+    app: product-service
+---
+# Role for Product Service
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: product-service-role
+  namespace: product-service
+rules:
+# Allow reading configmaps and secrets
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+# Allow reading services
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list"]
+# Allow reading pods (for service discovery)
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+# RoleBinding for Product Service
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: product-service-rolebinding
+  namespace: product-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: product-service-role
+subjects:
+- kind: ServiceAccount
+  name: product-service-sa
+  namespace: product-service
+---
+# Role for ArgoCD to manage product-service namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-product-service-manager
+  namespace: product-service
+rules:
+- apiGroups: ["", "apps", "batch", "networking.k8s.io", "monitoring.coreos.com", "autoscaling", "policy", "rbac.authorization.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# RoleBinding for ArgoCD
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-product-service-manager-binding
+  namespace: product-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-product-service-manager
+subjects:
+- kind: ServiceAccount
+  name: argocd-application-controller
+  namespace: argocd
+---
+# Role for Jenkins to deploy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-deployer
+  namespace: product-service
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# RoleBinding for Jenkins
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: product-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jenkins-deployer
+subjects:
+- kind: ServiceAccount
+  name: jenkins
+  namespace: jenkins  # Adjust based on your Jenkins namespace

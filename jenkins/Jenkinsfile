@@ -1,0 +1,387 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Docker Registry
+        DOCKER_REGISTRY = 'eknathdj/devops-argocd-jenkins-app'
+        DOCKER_IMAGE = 'product-service'
+        DOCKER_CREDENTIALS_ID = 'docker-registry-credentials'
+        
+        // Kubernetes
+        KUBECONFIG_CREDENTIALS_ID = 'kubeconfig-credentials'
+        NAMESPACE = 'product-service'
+        
+        // Git
+        GIT_REPO = 'https://github.com/eknathdj/devops-sample-app.git'
+        GIT_CREDENTIALS_ID = 'github-credentials'
+        
+        // ArgoCD
+        ARGOCD_SERVER = 'argocd.yourdomain.com'
+        ARGOCD_CREDENTIALS_ID = 'argocd-credentials'
+        
+        // SonarQube (Optional)
+        SONARQUBE_CREDENTIALS_ID = 'sonarqube-token'
+        
+        // Build Info
+        BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "Checking out code from ${GIT_REPO}"
+                    checkout scm
+                    env.GIT_COMMIT = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
+                    env.GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                }
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                script {
+                    echo "Setting up build environment"
+                    sh '''
+                        echo "Build Number: ${BUILD_NUMBER}"
+                        echo "Git Commit: ${GIT_COMMIT}"
+                        echo "Git Branch: ${GIT_BRANCH}"
+                        echo "Build Tag: ${BUILD_TAG}"
+                    '''
+                }
+            }
+        }
+        
+        stage('Code Quality - Lint') {
+            steps {
+                script {
+                    echo "Running linters and code quality checks"
+                    sh '''
+                        # Add your linting commands here
+                        # Example for Python:
+                        # pylint src/ || true
+                        # flake8 src/ || true
+                        
+                        # Example for Node.js:
+                        # npm run lint || true
+                        
+                        # Example for Go:
+                        # golangci-lint run || true
+                        
+                        echo "Linting completed"
+                    '''
+                }
+            }
+        }
+        
+        stage('Unit Tests') {
+            steps {
+                script {
+                    echo "Running unit tests"
+                    sh '''
+                        # Add your test commands here
+                        # Example for Python:
+                        # pytest tests/unit --cov --cov-report=xml
+                        
+                        # Example for Node.js:
+                        # npm test
+                        
+                        # Example for Go:
+                        # go test -v -coverprofile=coverage.out ./...
+                        
+                        echo "Unit tests completed"
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Publish test results
+                    // junit '**/test-results/*.xml'
+                    echo "Test results would be published here"
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            parallel {
+                stage('SAST - SonarQube') {
+                    steps {
+                        script {
+                            echo "Running SonarQube analysis"
+                            // Uncomment and configure for SonarQube
+                            /*
+                            withSonarQubeEnv('SonarQube') {
+                                sh '''
+                                    sonar-scanner \
+                                        -Dsonar.projectKey=product-service \
+                                        -Dsonar.sources=. \
+                                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                                        -Dsonar.login=${SONAR_AUTH_TOKEN}
+                                '''
+                            }
+                            */
+                        }
+                    }
+                }
+                
+                stage('Dependency Check') {
+                    steps {
+                        script {
+                            echo "Scanning dependencies for vulnerabilities"
+                            sh '''
+                                # Example dependency scans (uncomment/use as needed)
+                                # npm audit --audit-level=moderate
+                                # safety check
+                                # nancy go.sum
+
+                                # Secret detection using gitleaks (fail pipeline if secrets are detected).
+                                if command -v gitleaks >/dev/null 2>&1; then
+                                    echo "Running gitleaks secret scan..."
+                                    gitleaks detect --source . --redact
+                                    rc=$?
+                                    if [ $rc -ne 0 ]; then
+                                        echo "ERROR: gitleaks detected potential secrets (exit code $rc). Failing the build."
+                                        exit $rc
+                                    fi
+                                else
+                                    echo "gitleaks not found; install gitleaks to enable secret scanning"
+                                fi
+
+                                echo "Dependency scan completed"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG}"
+                    sh """
+                        docker build \
+                            --tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG} \
+                            --tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest \
+                            --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                            --build-arg VCS_REF=${GIT_COMMIT} \
+                            --build-arg VERSION=${BUILD_TAG} \
+                            -f Dockerfile .
+                    """
+                }
+            }
+        }
+        
+        stage('Container Security Scan') {
+            steps {
+                script {
+                    echo "Scanning Docker image for vulnerabilities"
+                    sh """
+                        # Using Trivy
+                        # trivy image --severity HIGH,CRITICAL ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG}
+                        
+                        # Or using Docker Scout
+                        # docker scout cves ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG}
+                        
+                        echo "Container scan completed"
+                    """
+                }
+            }
+        }
+        
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    echo "Pushing Docker image to registry"
+                    withCredentials([usernamePassword(
+                        credentialsId: "${DOCKER_CREDENTIALS_ID}",
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh '''
+                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin ${DOCKER_REGISTRY}
+                            docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG}
+                            docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
+                            docker logout ${DOCKER_REGISTRY}
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Update Kubernetes Manifests') {
+            steps {
+                script {
+                    echo "Updating Kubernetes manifests with new image tag"
+                    withCredentials([usernamePassword(
+                        credentialsId: "${GIT_CREDENTIALS_ID}",
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
+                        sh """
+                            git config user.email "jenkins@yourdomain.com"
+                            git config user.name "Jenkins CI"
+                            
+                            # Update the image tag in deployment manifest
+                            sed -i 's|image: .*/${DOCKER_IMAGE}:.*|image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${BUILD_TAG}|g' k8s/product-service/deployment.yaml
+                            
+                            # Commit and push changes
+                            git add k8s/product-service/deployment.yaml
+                            git commit -m "Update image to ${BUILD_TAG} [skip ci]" || echo "No changes to commit"
+                            
+                            git push https://${GIT_USER}:${GIT_TOKEN}@github.com/eknathdj/devops-sample-app.git HEAD:main
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Trigger ArgoCD Sync') {
+            steps {
+                script {
+                    echo "Syncing ArgoCD application"
+                    withCredentials([string(
+                        credentialsId: "${ARGOCD_CREDENTIALS_ID}",
+                        variable: 'ARGOCD_TOKEN'
+                    )]) {
+                        sh """
+                            # Login to ArgoCD
+                            # NOTE: '--insecure' was removed to enforce TLS verification. Ensure the Jenkins agent
+                            # trusts the ArgoCD server certificate. You can provide a CA bundle via credentials
+                            # and point ARGOCD_GRPC_WEB_ROOT_CERTIFICATE (or configure system trust store).
+                            if [ -n "${ARGOCD_CA_BUNDLE}" ]; then
+                                # Example: write CA to a temp file and provide it to argocd if supported by your version
+                                echo "${ARGOCD_CA_BUNDLE}" > /tmp/argocd_ca.pem
+                                export GRPC_WEB_TLS_ROOT_CERT_FILE=/tmp/argocd_ca.pem
+                            fi
+                            argocd login ${ARGOCD_SERVER} --auth-token=${ARGOCD_TOKEN}
+                            
+                            # Sync the application and check exit codes to fail the pipeline on errors
+                            argocd app sync product-service --force --prune
+                            rc=$?
+                            if [ $rc -ne 0 ]; then
+                                echo "ERROR: argocd app sync failed with exit code $rc"
+                                exit $rc
+                            fi
+
+                            # Wait for sync to complete
+                            argocd app wait product-service --health --timeout 300
+                            rc=$?
+                            if [ $rc -ne 0 ]; then
+                                echo "ERROR: argocd app wait failed with exit code $rc"
+                                exit $rc
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deployment Verification') {
+            steps {
+                script {
+                    echo "Verifying deployment"
+                    withKubeConfig([credentialsId: "${KUBECONFIG_CREDENTIALS_ID}"]) {
+                        sh """
+                            # Check deployment status
+                            kubectl rollout status deployment/product-service -n ${NAMESPACE} --timeout=5m
+                            
+                            # Check pod health
+                            kubectl get pods -n ${NAMESPACE} -l app=product-service
+                            
+                            # Verify service endpoints
+                            kubectl get endpoints product-service -n ${NAMESPACE}
+                            
+                            # Check recent events
+                            kubectl get events -n ${NAMESPACE} --sort-by='.lastTimestamp' | tail -20
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            steps {
+                script {
+                    echo "Running integration tests against deployed service"
+                    sh '''
+                        # Add your integration test commands here
+                        # Example:
+                        # newman run postman_collection.json -e production.postman_environment.json
+                        
+                        # Or custom test scripts
+                        # ./scripts/integration-tests.sh
+                        
+                        echo "Integration tests completed"
+                    '''
+                }
+            }
+        }
+        
+        stage('Smoke Tests') {
+            steps {
+                script {
+                    echo "Running smoke tests"
+                    withKubeConfig([credentialsId: "${KUBECONFIG_CREDENTIALS_ID}"]) {
+                        sh """
+                            # Get service URL
+                            SERVICE_URL=\$(kubectl get svc product-service -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                            
+                            if [ -z "\$SERVICE_URL" ]; then
+                                SERVICE_URL="product-service.${NAMESPACE}.svc.cluster.local"
+                            fi
+                            
+                            echo "Testing service at: \$SERVICE_URL"
+                            
+                            # Health check
+                            kubectl run curl-test --image=curlimages/curl:latest --rm -i --restart=Never -n ${NAMESPACE} -- \
+                                curl -f http://product-service/health/live || exit 1
+                            
+                            echo "Smoke tests passed"
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                echo "Pipeline completed successfully!"
+                // Send success notification
+                // slackSend(channel: '#deployments', color: 'good', 
+                //     message: "✅ Product Service deployed successfully - Build #${BUILD_NUMBER}")
+            }
+        }
+        
+        failure {
+            script {
+                echo "Pipeline failed!"
+                // Send failure notification
+                // slackSend(channel: '#deployments', color: 'danger', 
+                //     message: "❌ Product Service deployment failed - Build #${BUILD_NUMBER}")
+            }
+        }
+        
+        always {
+            script {
+                echo "Cleaning up..."
+                sh '''
+                    # Clean up Docker images
+                    docker image prune -f
+                    
+                    # Clean up workspace if needed
+                    # rm -rf workspace/*
+                '''
+            }
+        }
+    }
+}
