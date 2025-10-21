@@ -59,14 +59,14 @@ pipeline {
             }
         }
         
-        stage('Push Docker Image') {
-            steps {
-                sh """
-                    docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
-                    docker push ${DOCKER_IMAGE}:latest
-                """
-            }
-        }
+        // stage('Push Docker Image') {
+        //     steps {
+        //         sh """
+        //             docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+        //             docker push ${DOCKER_IMAGE}:latest
+        //         """
+        //     }
+        // }
         
         stage('Update Kubernetes Manifest') {
             steps {
