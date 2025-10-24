@@ -1,0 +1,45 @@
+{
+  "dashboard": {
+    "title": "DevOps Pipeline Overview",
+    "tags": ["devops", "ci-cd"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Jenkins Build Success Rate",
+        "targets": [
+          {
+            "expr": "sum(rate(jenkins_builds_success_total[5m])) / sum(rate(jenkins_builds_total[5m])) * 100"
+          }
+        ],
+        "type": "stat"
+      },
+      {
+        "title": "ArgoCD Sync Status",
+        "targets": [
+          {
+            "expr": "argocd_app_info{sync_status=\"Synced\"}"
+          }
+        ],
+        "type": "stat"
+      },
+      {
+        "title": "Application Response Time",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+          }
+        ],
+        "type": "graph"
+      },
+      {
+        "title": "Pod Restart Count",
+        "targets": [
+          {
+            "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"staging\"}) by (pod)"
+          }
+        ],
+        "type": "graph"
+      }
+    ]
+  }
+}
