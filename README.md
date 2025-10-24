@@ -1,4 +1,4 @@
-# DevOps Sample App
+# DevOps ArgoCD Jenkins App
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/devops-sample-app)](https://hub.docker.com/r/yourusername/devops-sample-app)
