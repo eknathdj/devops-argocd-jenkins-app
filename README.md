@@ -1,24 +1,31 @@
 # DevOps Sample App
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/devops-sample-app)](https://hub.docker.com/r/yourusername/devops-sample-app)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/eknathdj/devops-sample-app/actions)
+
 > A complete CI/CD pipeline demonstration using Jenkins, ArgoCD, Docker, and Kubernetes
 
 This repository showcases a production-ready DevOps workflow with automated builds, containerization, and GitOps-based deployments.
 
 ## 📋 Table of Contents
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Detailed Setup](#detailed-setup)
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Prerequisites](#-prerequisites)
+- [Quick Start](#-quick-start)
+- [Detailed Setup](#-detailed-setup)
   - [1. Jenkins Setup](#1-jenkins-setup)
   - [2. GitHub Configuration](#2-github-configuration)
   - [3. DockerHub Configuration](#3-dockerhub-configuration)
   - [4. ArgoCD Setup](#4-argocd-setup)
-- [Pipeline Workflow](#pipeline-workflow)
-- [Troubleshooting](#troubleshooting)
-- [Best Practices](#best-practices)
-- [Contributing](#contributing)
+  - [5. Monitoring Setup](#5-monitoring-setup)
+- [Pipeline Workflow](#-pipeline-workflow)
+- [Troubleshooting](#-troubleshooting)
+- [Best Practices](#-best-practices)
+- [Contributing](#-contributing)
+- [Additional Resources](#-additional-resources)
+- [License](#-license)
 
 ---
 
@@ -30,6 +37,7 @@ This project implements a complete CI/CD pipeline that:
 - ✅ Updates Kubernetes manifests with new image tags
 - ✅ Deploys applications using GitOps principles via ArgoCD
 - ✅ Supports multiple environments (staging, production)
+- ✅ Includes monitoring with Prometheus and Grafana
 
 **Tech Stack:**
 - **CI/CD**: Jenkins
@@ -37,6 +45,7 @@ This project implements a complete CI/CD pipeline that:
 - **Orchestration**: Kubernetes
 - **GitOps**: ArgoCD
 - **Registry**: DockerHub
+- **Monitoring**: Prometheus, Grafana, Alertmanager
 
 ---
 
@@ -61,6 +70,12 @@ This project implements a complete CI/CD pipeline that:
                      │   ArgoCD    │─────▶│ Kubernetes  │
                      │   (Deploy)  │      │  (Runtime)  │
                      └─────────────┘      └─────────────┘
+                            │
+                            ▼
+                     ┌─────────────┐
+                     │ Monitoring  │
+                     │ (Prom/Graf) │
+                     └─────────────┘
 ```
 
 **Workflow:**
@@ -70,6 +85,7 @@ This project implements a complete CI/CD pipeline that:
 4. Jenkins updates Kubernetes manifest with new image tag
 5. ArgoCD detects manifest changes
 6. ArgoCD syncs and deploys to Kubernetes cluster
+7. Monitoring stack tracks application health
 
 ---
 
@@ -78,14 +94,14 @@ This project implements a complete CI/CD pipeline that:
 Before starting, ensure you have:
 
 ### Required Tools
-- **Docker** (v20.10+) - [Install Docker](https://docs.docker.com/get-docker/)
-- **Kubernetes Cluster** (v1.24+) - Options:
+- **Docker** (v24.0+) - [Install Docker](https://docs.docker.com/get-docker/)
+- **Kubernetes Cluster** (v1.26+) - Options:
   - Minikube (local testing)
   - K3s/K3d (lightweight)
   - EKS/GKE/AKS (cloud)
   - OpenShift (optional)
-- **kubectl** (v1.24+) - [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
-- **Git** (v2.30+)
+- **kubectl** (v1.26+) - [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
+- **Git** (v2.34+)
 
 ### Accounts Needed
 - GitHub account with repository access
@@ -96,13 +112,18 @@ Before starting, ensure you have:
 - **Minimum**: 4GB RAM, 2 CPU cores, 20GB disk space
 - **Recommended**: 8GB RAM, 4 CPU cores, 50GB disk space
 
+### Optional Tools
+- **Helm** (v3.0+) - For advanced deployments
+- **ArgoCD CLI** - For command-line operations
+- **ngrok** - For local webhook testing
+
 ---
 
 ## 🚀 Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/eknathdj/devops-sample-app.git
+git clone https://github.com/eknathdj/devops-argocd-jenkins-app.git
 cd devops-sample-app
 
 # Build Docker image locally (optional test)
@@ -110,9 +131,12 @@ docker build -t devops-sample-app:local .
 
 # Run locally to test
 docker run -p 8080:8080 devops-sample-app:local
+
+# Verify application
+curl http://localhost:8080/health
 ```
 
-For full CI/CD setup, continue to [Detailed Setup](#detailed-setup).
+For full CI/CD setup, continue to [Detailed Setup](#-detailed-setup).
 
 ---
 
@@ -124,7 +148,7 @@ For full CI/CD setup, continue to [Detailed Setup](#detailed-setup).
 
 **Option A: Using Docker Compose (Recommended)**
 
-Create `docker-compose.yml`:
+Create `jenkins/docker-compose.yml`:
 
 ```yaml
 version: '3.8'
@@ -143,7 +167,7 @@ services:
     command: >
       bash -c "
         apt-get update &&
-        apt-get install -y docker.io &&
+        apt-get install -y docker.io curl git &&
         git config --global --add safe.directory '*' &&
         /usr/local/bin/jenkins.sh
       "
@@ -154,7 +178,7 @@ volumes:
 
 Start Jenkins:
 ```bash
-docker-compose up -d
+docker-compose -f jenkins/docker-compose.yml up -d
 ```
 
 **Option B: Using Docker CLI**
@@ -168,9 +192,9 @@ docker run -d \
   --user root \
   jenkins/jenkins:lts
 
-# Install Docker inside Jenkins container
+# Install dependencies inside Jenkins container
 docker exec -it jenkins bash
-apt-get update && apt-get install -y docker.io
+apt-get update && apt-get install -y docker.io curl git
 git config --global --add safe.directory '*'
 exit
 docker restart jenkins
@@ -249,18 +273,18 @@ Click "Install without restart" and wait for completion.
 
 2. **Configure Pipeline:**
    - **Description:** CI/CD Pipeline for DevOps Sample App
-   
+
    - **Build Triggers:**
      - ✅ Check "GitHub hook trigger for GITScm polling"
-   
+
    - **Pipeline Definition:**
      - Select "Pipeline script from SCM"
      - **SCM:** Git
-     - **Repository URL:** `https://github.com/eknathdj/devops-sample-app`
+     - **Repository URL:** `https://github.com/eknathdj/devops-argocd-jenkins-app`
      - **Credentials:** Select `github-creds`
      - **Branch:** `*/main`
      - **Script Path:** `Jenkinsfile`
-   
+
    - **Additional Behaviours:**
      - Add "Wipe out repository & force clone" (optional, for clean builds)
 
@@ -293,19 +317,41 @@ Ensure your repository has this structure:
 
 ```
 devops-sample-app/
+├── .gitignore                          # Git ignore rules
 ├── Dockerfile                          # Docker build instructions
-├── Jenkinsfile                        # CI/CD pipeline definition
-├── argocd-application-sample          # ArgoCD UI
-├── src/                               # Application source code
-│   └── app.js (or your app files)
+├── Jenkinsfile                         # CI/CD pipeline definition
+├── package.json                        # Node.js dependencies
+├── package-lock.json                   # Lockfile for dependencies
+├── server.js                           # Main application file
+├── healthcheck.js                      # Health check endpoint
+├── prometheus-alerts.yaml              # Prometheus alerting rules
+├── devops-pipeline-dashboard.json      # Grafana dashboard JSON
+├── SECURITY.md                         # Security policy
+├── README.md                           # This file
+├── argocd/
+│   ├── production-application.yaml     # ArgoCD app for production
+│   └── staging-application.yaml        # ArgoCD app for staging
+├── argocd-servicemonitor.yaml          # ArgoCD service monitor
 ├── environments/
-│   ├── staging/
-│   │   └── deployment.yaml           # Kubernetes manifest for staging
-│   │   └── service.yaml              # Kubernetes manifest for staging
-│   │   └── kustomization.yaml        # Kubernetes manifest for staging
-│   └── production/
-│       └── deployment.yaml           # Kubernetes manifest for production
-└── README.md
+│   ├── production/
+│   │   ├── deployment.yaml             # K8s deployment for production
+│   │   ├── service.yaml                # K8s service for production
+│   │   ├── namespace.yaml              # K8s namespace for production
+│   │   └── kustomization.yaml          # Kustomize config for production
+│   └── staging/
+│       ├── deployment.yaml             # K8s deployment for staging
+│       ├── service.yaml                # K8s service for staging
+│       ├── namespace.yaml              # K8s namespace for staging
+│       ├── kustomization.yaml          # Kustomize config for staging
+│       └── servicemonitor.yaml         # Service monitor for staging
+├── jenkins/
+│   ├── docker-compose.yml              # Jenkins Docker Compose
+│   └── init-scripts/                   # Jenkins initialization scripts
+├── scripts/
+│   ├── install-argocd.sh               # ArgoCD installation script
+│   ├── install-monitoring.sh           # Monitoring stack installation
+│   └── test-pipeline.sh                # Pipeline testing script
+└── jenkins-servicemonitor.yaml         # Jenkins service monitor
 ```
 
 ---
@@ -341,6 +387,13 @@ environment {
 
 #### Step 4.1: Install ArgoCD
 
+Use the provided installation script:
+```bash
+chmod +x scripts/install-argocd.sh
+./scripts/install-argocd.sh
+```
+
+Or manually:
 ```bash
 # Create namespace
 kubectl create namespace argocd
@@ -392,70 +445,58 @@ argocd login localhost:8081 --username admin --password <password> --insecure
 
 #### Step 4.5: Create ArgoCD Application
 
-**Option A: Using ArgoCD UI**
-
-1. Login to ArgoCD UI
-2. Click "New App"
-3. Configure:
-   - **Application Name:** `sample-app-staging`
-   - **Project:** `default`
-   - **Sync Policy:** `Automatic`
-     - ✅ Self Heal
-     - ✅ Prune Resources
-   - **Repository URL:** `https://github.com/eknathdj/devops-sample-app`
-   - **Revision:** `HEAD`
-   - **Path:** `environments/staging`
-   - **Cluster URL:** `https://kubernetes.default.svc`
-   - **Namespace:** `staging` (create if doesn't exist)
-4. Click "Create"
-
-**Option B: Using ArgoCD CLI**
+Use the pre-configured application manifests:
 
 ```bash
-# Create namespace
-kubectl create namespace staging
+# For staging
+kubectl apply -f argocd/staging-application.yaml
 
-# Create application
-argocd app create sample-app-staging \
-  --repo https://github.com/eknathdj/devops-sample-app \
-  --path environments/staging \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace staging \
-  --sync-policy automated \
-  --auto-prune \
-  --self-heal
+# For production
+kubectl apply -f argocd/production-application.yaml
 ```
 
-**Option C: Using Kubernetes Manifest**
+Or create manually via UI/CLI as described in the original setup.
 
-Create `argocd-app.yaml`:
+---
 
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: sample-app-staging
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/eknathdj/devops-sample-app
-    targetRevision: HEAD
-    path: environments/staging
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: staging
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-```
+### 5. Monitoring Setup
 
-Apply:
+#### Step 5.1: Install Monitoring Stack
+
+Use the provided installation script:
 ```bash
-kubectl apply -f argocd-app.yaml
+chmod +x scripts/install-monitoring.sh
+./scripts/install-monitoring.sh
+```
+
+Or manually:
+```bash
+# Install Prometheus and Grafana
+kubectl create namespace monitoring
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  -n monitoring
+
+# Access Grafana
+kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80
+# Default: admin / prom-operator
+```
+
+#### Step 5.2: Import Dashboard
+
+1. Access Grafana at `http://localhost:3000`
+2. Go to **Dashboards** → **Import**
+3. Upload `devops-pipeline-dashboard.json`
+4. Select the Prometheus data source
+
+#### Step 5.3: Configure ServiceMonitors
+
+Apply the service monitors:
+```bash
+kubectl apply -f jenkins-servicemonitor.yaml
+kubectl apply -f argocd-servicemonitor.yaml
+kubectl apply -f environments/staging/servicemonitor.yaml
 ```
 
 ---
@@ -675,33 +716,6 @@ kubectl get events -n staging --sort-by='.lastTimestamp'
 
 ---
 
-## 📊 Monitoring and Observability
-
-### Add Monitoring Stack (Optional)
-
-```bash
-# Install Prometheus and Grafana
-kubectl create namespace monitoring
-
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install prometheus prometheus-community/kube-prometheus-stack \
-  -n monitoring
-
-# Access Grafana
-kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80
-# Default: admin / prom-operator
-```
-
-### Useful Metrics to Track
-
-- Build success rate
-- Deployment frequency
-- Lead time for changes
-- Mean time to recovery (MTTR)
-- Container restart rate
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
@@ -716,10 +730,10 @@ Contributions are welcome! Please follow these steps:
 
 ```bash
 # Clone your fork
-git clone https://github.com/<your-username>/devops-sample-app.git
+git clone https://github.com/eknathdj/devops-argocd-jenkins-app.git
 
 # Add upstream remote
-git remote add upstream https://github.com/eknathdj/devops-sample-app.git
+git remote add upstream https://github.com/eknathdj/devops-argocd-jenkins-app.git
 
 # Create feature branch
 git checkout -b feature/my-feature
@@ -766,7 +780,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Eknath DJ**
 - GitHub: [@eknathdj](https://github.com/eknathdj)
-- Repository: [devops-sample-app](https://github.com/eknathdj/devops-sample-app)
+- Repository: [devops-sample-app](https://github.com/eknathdj/devops-argocd-jenkins-app)
 
 ---
 
@@ -775,6 +789,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Jenkins community for excellent CI/CD tooling
 - ArgoCD team for GitOps innovation
 - Kubernetes community for container orchestration
+- Prometheus and Grafana teams for monitoring excellence
 - All contributors to this project
 
 ---
@@ -783,8 +798,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 If you encounter issues:
 
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Search existing [GitHub Issues](https://github.com/eknathdj/devops-sample-app/issues)
+1. Check the [Troubleshooting](#-troubleshooting) section
+2. Search existing [GitHub Issues](https://github.com/eknathdj/devops-argocd-jenkins-app/issues)
 3. Create a new issue with:
    - Clear description of the problem
    - Steps to reproduce
